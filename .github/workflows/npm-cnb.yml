@@ -7,10 +7,6 @@ on:
         description: 'Package list (name:version,name:version)'
         required: true
         default: 'lodash:4.17.21,express:4.18.2'
-      cnb_registry:
-        description: 'CNB Registry URL'
-        required: true
-        default: 'https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/'
 
 jobs:
   sync:
@@ -24,8 +20,6 @@ jobs:
       - name: Sync packages to CNB
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
-          # 设置环境变量，npm会自动使用CNB仓库
-          NPM_CONFIG_REGISTRY: '${{ github.event.inputs.cnb_registry }}'
         run: |
           IFS=',' read -ra PACKAGES <<< "${{ github.event.inputs.package_list }}"
           
@@ -46,12 +40,10 @@ jobs:
             tar -xf *.tgz
             cd package
             
-            # 🔑 在包目录中设置CNB认证
-            cat > .npmrc << EOF
-            registry=${{ github.event.inputs.cnb_registry }}
-            always-auth=true
-            //npm.cnb.cool/nilpotenter/cloud-npm/-/packages/:_authToken=$CNB_TOKEN
-            EOF
+            # 🔑 在包目录中设置CNB认证 - 使用简单的echo命令
+            echo "registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/" > .npmrc
+            echo "always-auth=true" >> .npmrc
+            echo "//npm.cnb.cool/nilpotenter/cloud-npm/-/packages/:_authToken=$CNB_TOKEN" >> .npmrc
             
             # 发布到CNB制品仓库
             npm publish --loglevel=verbose
