@@ -20,6 +20,7 @@ jobs:
       - name: Sync packages to CNB
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
+          AUTHORIZED: 'true'  # 🔑 关键：设置授权环境变量
         run: |
           IFS=',' read -ra PACKAGES <<< "${{ github.event.inputs.package_list }}"
           
