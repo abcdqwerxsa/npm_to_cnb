@@ -21,6 +21,13 @@ jobs:
         env:
           CNB_TOKEN: ${{ secrets.CNB_TOKEN }}
         run: |
+          # 创建临时 .npmrc 用于版本检查
+          cat > /tmp/cnb-check.npmrc << EOF
+          registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/
+          //npm.cnb.cool/nilpotenter/cloud-npm/-/packages/:_authToken=$CNB_TOKEN
+          always-auth=true
+          EOF
+          
           IFS=',' read -ra PACKAGES <<< "${{ github.event.inputs.package_list }}"
           
           for spec in "${PACKAGES[@]}"; do
@@ -28,35 +35,39 @@ jobs:
             pkg_name="${PARTS[0]}"
             pkg_version="${PARTS[1]}"
             
-            echo "🔄 Checking $pkg_name@$pkg_version"
+            echo "🔍 Checking $pkg_name@$pkg_version in CNB registry..."
             
-            # 🔑 首先检查包是否已存在
-            if npm view "${pkg_name}@${pkg_version}" --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/ > /dev/null 2>&1; then
+            # 使用正确的认证检查包是否存在
+            if npm view "${pkg_name}@${pkg_version}" --userconfig /tmp/cnb-check.npmrc > /dev/null 2>&1; then
               echo "⏭️  $pkg_name@$pkg_version already exists in CNB, skipping"
               continue
+            else
+              echo "📦 $pkg_name@$pkg_version not found, starting sync..."
             fi
-            
-            echo "📦 Syncing $pkg_name@$pkg_version to CNB"
             
             # 创建临时目录
             mkdir temp_sync && cd temp_sync
             
             # 从官方源下载包
+            echo "Downloading $pkg_name@$pkg_version from npmjs.org..."
             npm pack "${pkg_name}@${pkg_version}" --registry=https://registry.npmjs.org
             
             # 解压
             tar -xf *.tgz
             cd package
             
-            # 设置CNB认证
+            # 设置CNB认证用于发布
             echo "//npm.cnb.cool/nilpotenter/cloud-npm/-/packages/:_authToken=$CNB_TOKEN" > .npmrc
+            echo "always-auth=true" >> .npmrc
             
             # 发布到CNB制品仓库
-            AUTHORIZED=true npm publish --ignore-scripts --loglevel=verbose --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/
+            echo "Publishing $pkg_name@$pkg_version to CNB..."
+            AUTHORIZED=true npm publish --ignore-scripts --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/ --loglevel=info
             
             cd ../..
             rm -rf temp_sync
-            echo "✅ Synced to CNB: $pkg_name@$pkg_version"
+            echo "✅ Successfully synced: $pkg_name@$pkg_version"
           done
           
+          rm -f /tmp/cnb-check.npmrc
           echo "🎉 All packages processed successfully!"
