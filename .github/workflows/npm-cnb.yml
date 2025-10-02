@@ -28,24 +28,35 @@ jobs:
             pkg_name="${PARTS[0]}"
             pkg_version="${PARTS[1]}"
             
-            echo "🔄 Processing $pkg_name@$pkg_version"
+            echo "🔄 Checking $pkg_name@$pkg_version"
             
+            # 🔑 首先检查包是否已存在
+            if npm view "${pkg_name}@${pkg_version}" --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/ > /dev/null 2>&1; then
+              echo "⏭️  $pkg_name@$pkg_version already exists in CNB, skipping"
+              continue
+            fi
+            
+            echo "📦 Syncing $pkg_name@$pkg_version to CNB"
+            
+            # 创建临时目录
             mkdir temp_sync && cd temp_sync
+            
+            # 从官方源下载包
             npm pack "${pkg_name}@${pkg_version}" --registry=https://registry.npmjs.org
+            
+            # 解压
             tar -xf *.tgz
             cd package
             
+            # 设置CNB认证
             echo "//npm.cnb.cool/nilpotenter/cloud-npm/-/packages/:_authToken=$CNB_TOKEN" > .npmrc
             
-            # 尝试发布，如果失败就跳过（可能已存在）
-            if AUTHORIZED=true npm publish --ignore-scripts --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/ 2>/dev/null; then
-              echo "✅ Synced: $pkg_name@$pkg_version"
-            else
-              echo "⏭️  Skipped (may exist): $pkg_name@$pkg_version"
-            fi
+            # 发布到CNB制品仓库
+            AUTHORIZED=true npm publish --ignore-scripts --loglevel=verbose --registry=https://npm.cnb.cool/nilpotenter/cloud-npm/-/packages/
             
             cd ../..
             rm -rf temp_sync
+            echo "✅ Synced to CNB: $pkg_name@$pkg_version"
           done
           
-          echo "🎉 All packages processed!"
+          echo "🎉 All packages processed successfully!"
